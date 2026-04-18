@@ -8,10 +8,38 @@ function createSessionId() {
 }
 
 const demoPrompts = [
-  'Latest treatment for lung cancer',
-  'Clinical trials for diabetes',
-  'Top researchers in Alzheimer\'s disease',
-  'Recent studies on heart disease'
+  {
+    label: 'Latest treatment for lung cancer',
+    question: 'Latest treatment for lung cancer',
+    context: {
+      disease: 'lung cancer',
+      additionalQuery: 'latest treatment'
+    }
+  },
+  {
+    label: 'Clinical trials for diabetes',
+    question: 'Clinical trials for diabetes',
+    context: {
+      disease: 'diabetes',
+      additionalQuery: 'clinical trials'
+    }
+  },
+  {
+    label: 'Top researchers in Alzheimer\'s disease',
+    question: 'Top researchers in Alzheimer\'s disease',
+    context: {
+      disease: 'Alzheimer\'s disease',
+      additionalQuery: 'top researchers'
+    }
+  },
+  {
+    label: 'Recent studies on heart disease',
+    question: 'Recent studies on heart disease',
+    context: {
+      disease: 'heart disease',
+      additionalQuery: 'recent studies'
+    }
+  }
 ];
 
 const SESSIONS_STORAGE_KEY = 'curalink-chat-sessions';
@@ -92,6 +120,15 @@ export default function App() {
 
   function updateContext(field, value) {
     setContext((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function applyDemoPrompt(promptConfig) {
+    setQuestion(promptConfig.question);
+    setContext((prev) => ({
+      ...prev,
+      disease: promptConfig.context.disease,
+      additionalQuery: promptConfig.context.additionalQuery
+    }));
   }
 
   useEffect(() => {
@@ -298,12 +335,12 @@ export default function App() {
           <div className="prompt-chip-row">
             {demoPrompts.map((prompt) => (
               <button
-                key={prompt}
+                key={prompt.label}
                 type="button"
-                className={`chip ${question === prompt ? 'is-active' : ''}`}
-                onClick={() => setQuestion(prompt)}
+                className={`chip ${question === prompt.question ? 'is-active' : ''}`}
+                onClick={() => applyDemoPrompt(prompt)}
               >
-                {prompt}
+                {prompt.label}
               </button>
             ))}
           </div>

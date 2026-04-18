@@ -658,8 +658,6 @@ button[disabled] {
   color: #fff;
   transform: translateY(-1px);
 }
-  gap: 0.6rem;
-}
 
 .trial-card {
   border: 1px solid var(--line);
