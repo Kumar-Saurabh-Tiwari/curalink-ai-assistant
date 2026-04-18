@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ContextForm from './components/ContextForm.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
-import { sendMessage } from './api/chatApi.js';
+import { getConversation, sendMessage } from './api/chatApi.js';
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -14,8 +14,55 @@ const demoPrompts = [
   'Recent studies on heart disease'
 ];
 
+const SESSIONS_STORAGE_KEY = 'curalink-chat-sessions';
+const ACTIVE_SESSION_STORAGE_KEY = 'curalink-active-session';
+const MAX_STORED_SESSIONS = 14;
+
+function loadStoredSessions() {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(SESSIONS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item) => item?.sessionId)
+      .map((item) => ({
+        sessionId: item.sessionId,
+        title: item.title || 'New chat',
+        updatedAt: item.updatedAt || new Date().toISOString()
+      }))
+      .slice(0, MAX_STORED_SESSIONS);
+  } catch {
+    return [];
+  }
+}
+
+function buildSessionTitle(question = '') {
+  const trimmed = question.trim();
+  if (!trimmed) return 'New chat';
+  if (trimmed.length <= 44) return trimmed;
+  return `${trimmed.slice(0, 44)}...`;
+}
+
+function upsertSessionMetadata(sessionList, sessionId, title, updatedAt = new Date().toISOString()) {
+  const next = sessionList.filter((item) => item.sessionId !== sessionId);
+  next.unshift({ sessionId, title: title || 'New chat', updatedAt });
+  return next.slice(0, MAX_STORED_SESSIONS);
+}
+
+function getInitialSessionId() {
+  const stored = loadStoredSessions();
+  const active = typeof window !== 'undefined' ? window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) : '';
+  if (active) return active;
+  if (stored.length) return stored[0].sessionId;
+  return createSessionId();
+}
+
 export default function App() {
-  const [sessionId] = useState(createSessionId);
+  const [sessionStore, setSessionStore] = useState(loadStoredSessions);
+  const [sessionId, setSessionId] = useState(getInitialSessionId);
   const [context, setContext] = useState({
     patientName: '',
     disease: '',
@@ -27,6 +74,7 @@ export default function App() {
   const [latestResult, setLatestResult] = useState(null);
   const [retrievalDepth, setRetrievalDepth] = useState(160);
   const [loading, setLoading] = useState(false);
+  const [isHydratingSession, setIsHydratingSession] = useState(false);
   const [error, setError] = useState('');
 
   const canSubmit = useMemo(() => question.trim().length > 3, [question]);
@@ -46,6 +94,78 @@ export default function App() {
     setContext((prev) => ({ ...prev, [field]: value }));
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessionStore));
+  }, [sessionStore]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
+    setSessionStore((prev) => upsertSessionMetadata(prev, sessionId, 'New chat'));
+  }, [sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateSession() {
+      setIsHydratingSession(true);
+      setError('');
+
+      try {
+        const convo = await getConversation(sessionId);
+        if (cancelled) return;
+
+        const messages = convo?.messages || [];
+        const firstUserQuestion = messages.find((msg) => msg.role === 'user')?.content || 'New chat';
+
+        setSessionStore((prev) =>
+          upsertSessionMetadata(prev, sessionId, buildSessionTitle(firstUserQuestion), convo?.lastUpdatedAt)
+        );
+
+        setContext((prev) => ({
+          ...prev,
+          patientName: convo?.patientName || '',
+          disease: convo?.disease || '',
+          location: convo?.location || ''
+        }));
+
+        setHistory(messages.map((msg) => ({ role: msg.role, text: msg.content || '' })));
+
+        const latestAssistant = [...messages].reverse().find((msg) => msg.role === 'assistant');
+        if (latestAssistant?.structuredResponse) {
+          setLatestResult({
+            response: latestAssistant.structuredResponse,
+            sources: latestAssistant.sources || [],
+            topTrials: [],
+            topPublications: [],
+            retrieval: {
+              expandedQueries: latestAssistant?.retrievalContext?.expandedQueries || [],
+              fetched: { publications: 0, clinicalTrials: 0 },
+              warnings: []
+            }
+          });
+        } else {
+          setLatestResult(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setHistory([]);
+        setLatestResult(null);
+      } finally {
+        if (!cancelled) {
+          setIsHydratingSession(false);
+        }
+      }
+    }
+
+    hydrateSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
   async function onSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
@@ -54,6 +174,7 @@ export default function App() {
     setError('');
 
     const userQuestion = question.trim();
+    setSessionStore((prev) => upsertSessionMetadata(prev, sessionId, buildSessionTitle(userQuestion)));
     setHistory((prev) => [...prev, { role: 'user', text: userQuestion }]);
     setQuestion('');
 
@@ -66,6 +187,7 @@ export default function App() {
       });
 
       setLatestResult(result);
+      setSessionStore((prev) => upsertSessionMetadata(prev, sessionId, buildSessionTitle(userQuestion)));
       setHistory((prev) => [
         ...prev,
         {
@@ -90,6 +212,10 @@ export default function App() {
   }
 
   function clearConversation() {
+    const nextSessionId = createSessionId();
+    setSessionStore((prev) => upsertSessionMetadata(prev, nextSessionId, 'New chat'));
+    setSessionId(nextSessionId);
+    setQuestion('');
     setHistory([]);
     setLatestResult(null);
     setError('');
@@ -125,9 +251,31 @@ export default function App() {
           <div className="chat-headline">
             <h2>Conversation</h2>
             <button type="button" className="ghost-btn" onClick={clearConversation}>
-              Clear
+              New Chat
             </button>
           </div>
+
+          <section className="session-strip" aria-label="Recent sessions">
+            <div className="session-scroll">
+              {sessionStore.map((session) => (
+                <button
+                  key={session.sessionId}
+                  type="button"
+                  className={`session-chip ${session.sessionId === sessionId ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (session.sessionId !== sessionId) {
+                      setSessionId(session.sessionId);
+                      setQuestion('');
+                      setError('');
+                    }
+                  }}
+                  title={session.title}
+                >
+                  {session.title}
+                </button>
+              ))}
+            </div>
+          </section>
 
           <ContextForm context={context} onChange={updateContext} />
 
@@ -161,6 +309,7 @@ export default function App() {
           </div>
 
           <div className="chat-history">
+            {isHydratingSession ? <p className="placeholder">Loading previous session history...</p> : null}
             {history.map((entry, index) => (
               <div key={index} className={`bubble ${entry.role}`}>
                 {entry.text}

@@ -115,6 +115,41 @@ body {
   font-size: 1.1rem;
 }
 
+.session-strip {
+  margin-bottom: 0.75rem;
+}
+
+.session-scroll {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.session-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.35rem 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-chip:hover {
+  border-color: rgba(15, 23, 42, 0.24);
+  color: var(--ink);
+}
+
+.session-chip.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(15, 118, 110, 0.4);
+  color: var(--ink);
+}
+
 .ghost-btn {
   border: 1px solid var(--line);
   border-radius: 999px;
