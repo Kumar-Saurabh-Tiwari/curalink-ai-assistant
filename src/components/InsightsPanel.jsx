@@ -1,3 +1,5 @@
+import React from 'react';
+
 function SourceList({ sources }) {
   if (!sources?.length) return <p>No sources returned.</p>;
 
@@ -104,7 +106,9 @@ function TrialsSummary({ response, topTrials }) {
   );
 }
 
-export default function InsightsPanel({ result }) {
+export default function InsightsPanel({ result, summaryStats }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   if (!result) {
     return (
       <section className="insights-panel">
@@ -116,14 +120,22 @@ export default function InsightsPanel({ result }) {
 
   const { response, topTrials, topPublications, sources, retrieval } = result;
 
-  return (
-    <section className="insights-panel">
-      <h2>Structured Research Output</h2>
+  const content = (
+    <>
+      <div className="insights-header">
+        <h2>Structured Research Output</h2>
+        <button 
+          className="ghost-btn expand-btn" 
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? 'Close Full View' : 'View Full Details'}
+        </button>
+      </div>
       <WarningStrip warnings={retrieval?.warnings || []} />
       <div className="meta-strip">
         <span>Expanded Queries: {retrieval?.expandedQueries?.join(' | ')}</span>
         <span>
-          Depth: {retrieval?.fetched?.publications || 0} publications + {retrieval?.fetched?.clinicalTrials || 0} trials
+          Depth: {summaryStats?.publications || 0} publications + {summaryStats?.trials || 0} trials
         </span>
       </div>
 
@@ -173,6 +185,22 @@ export default function InsightsPanel({ result }) {
         <h3>Source Attribution</h3>
         <SourceList sources={sources} />
       </article>
+    </>
+  );
+
+  if (isExpanded) {
+    return (
+      <div className="insights-modal-overlay">
+        <section className="insights-panel expanded-panel">
+          {content}
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <section className="insights-panel">
+      {content}
     </section>
   );
 }

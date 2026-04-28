@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, Database, FileText, AlertTriangle, MessageSquare, Plus, Activity, User } from 'lucide-react';
 import ContextForm from './components/ContextForm.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
 import { getConversation, sendMessage } from './api/chatApi.js';
@@ -89,6 +91,9 @@ function getInitialSessionId() {
 }
 
 export default function App() {
+  // Always show welcome screen on fresh reload for presentation purposes
+  const [showWelcome, setShowWelcome] = useState(true);
+
   const [sessionStore, setSessionStore] = useState(loadStoredSessions);
   const [sessionId, setSessionId] = useState(getInitialSessionId);
   const [context, setContext] = useState({
@@ -105,17 +110,60 @@ export default function App() {
   const [isHydratingSession, setIsHydratingSession] = useState(false);
   const [error, setError] = useState('');
 
+  const [globalStats, setGlobalStats] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = window.localStorage.getItem('curalink-stats');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { publications: 0, trials: 0, warnings: 0 };
+  });
+
+  useEffect(() => {
+    if (showWelcome) {
+      const timer = setTimeout(() => setShowWelcome(false), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [showWelcome]);
+
   const canSubmit = useMemo(() => question.trim().length > 3, [question]);
   const sessionShortId = useMemo(() => sessionId.slice(-8), [sessionId]);
 
   const summaryStats = useMemo(() => {
     const fetched = latestResult?.retrieval?.fetched || {};
     const warnings = latestResult?.retrieval?.warnings || [];
+    
+    const currentPubs = fetched.publications || 0;
+    const currentTrials = fetched.clinicalTrials || 0;
+    const currentWarns = warnings.length || 0;
+
+    if (currentPubs === 0 && currentTrials === 0 && currentWarns === 0) {
+      return globalStats;
+    }
+
     return {
-      publications: fetched.publications || 0,
-      trials: fetched.clinicalTrials || 0,
-      warnings: warnings.length
+      publications: currentPubs,
+      trials: currentTrials,
+      warnings: currentWarns
     };
+  }, [latestResult, globalStats]);
+
+  useEffect(() => {
+    const fetched = latestResult?.retrieval?.fetched || {};
+    const warnings = latestResult?.retrieval?.warnings || [];
+    const currentPubs = fetched.publications || 0;
+    const currentTrials = fetched.clinicalTrials || 0;
+    
+    if (currentPubs > 0 || currentTrials > 0) {
+      const newStats = {
+        publications: currentPubs,
+        trials: currentTrials,
+        warnings: warnings.length || 0
+      };
+      setGlobalStats(newStats);
+      window.localStorage.setItem('curalink-stats', JSON.stringify(newStats));
+    }
   }, [latestResult]);
 
   function updateContext(field, value) {
@@ -174,12 +222,12 @@ export default function App() {
           setLatestResult({
             response: latestAssistant.structuredResponse,
             sources: latestAssistant.sources || [],
-            topTrials: [],
-            topPublications: [],
+            topTrials: latestAssistant.topTrials || [],
+            topPublications: latestAssistant.topPublications || [],
             retrieval: {
               expandedQueries: latestAssistant?.retrievalContext?.expandedQueries || [],
-              fetched: { publications: 0, clinicalTrials: 0 },
-              warnings: []
+              fetched: latestAssistant?.retrievalContext?.fetched || { publications: 0, clinicalTrials: 0 },
+              warnings: latestAssistant?.retrievalContext?.warnings || []
             }
           });
         } else {
@@ -259,36 +307,71 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="hero">
-        <p className="eyebrow">Curalink Hackathon Prototype</p>
-        <h1>AI Medical Research Assistant</h1>
-        <p>
-          Context-aware retrieval from OpenAlex, PubMed, and ClinicalTrials.gov with evidence-grounded reasoning
-          powered by a custom open-source LLM.
-        </p>
-        <div className="status-grid">
+    <>
+      <AnimatePresence>
+        {showWelcome && (
+          <motion.div 
+            className="welcome-overlay"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <Sparkles size={48} className="welcome-icon" />
+              <h1>Welcome to Curalink</h1>
+              <p>Initializing AI Medical Research Assistant...</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="app-shell" style={{ display: showWelcome ? 'none' : 'block' }}>
+        <nav className="top-nav">
+          <div className="nav-brand">
+            <Activity className="brand-icon" size={24} />
+            <span>Curalink</span>
+          </div>
+          <div className="nav-actions">
+            <button className="icon-btn"><User size={20} /></button>
+          </div>
+        </nav>
+
+        <header className="hero">
+        <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="eyebrow">
+          <Sparkles size={16} /> Curalink Intelligence Platform
+        </motion.div>
+        <motion.h1 initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
+          AI Medical Research Assistant
+        </motion.h1>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+          Context-aware retrieval from OpenAlex, PubMed, and ClinicalTrials.gov with evidence-grounded reasoning powered by a custom open-source LLM.
+        </motion.p>
+        <motion.div className="status-grid" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
           <article>
-            <span>Publications Fetched</span>
+            <span><FileText size={16} /> Publications Fetched</span>
             <strong>{summaryStats.publications}</strong>
           </article>
           <article>
-            <span>Clinical Trials Fetched</span>
+            <span><Database size={16} /> Clinical Trials Fetched</span>
             <strong>{summaryStats.trials}</strong>
           </article>
           <article>
-            <span>Pipeline Warnings</span>
+            <span><AlertTriangle size={16} /> Pipeline Warnings</span>
             <strong>{summaryStats.warnings}</strong>
           </article>
-        </div>
+        </motion.div>
       </header>
 
       <main className="layout">
         <section className="chat-panel">
           <div className="chat-headline">
-            <h2>Conversation</h2>
+            <h2><MessageSquare size={20} /> Conversation</h2>
             <button type="button" className="ghost-btn" onClick={clearConversation}>
-              New Chat
+              <Plus size={16} /> New Chat
             </button>
           </div>
 
@@ -382,8 +465,20 @@ export default function App() {
           {error ? <p className="error-text">{error}</p> : null}
         </section>
 
-        <InsightsPanel result={latestResult} />
+        <InsightsPanel result={latestResult} summaryStats={summaryStats} />
       </main>
+
+      <footer className="app-footer">
+        <div className="footer-content">
+          <p>&copy; {new Date().getFullYear()} Curalink Intelligence Platform. All rights reserved.</p>
+          <div className="footer-links">
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms of Service</a>
+            <a href="#">Documentation</a>
+          </div>
+        </div>
+      </footer>
     </div>
+    </>
   );
 }
