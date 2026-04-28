@@ -470,7 +470,13 @@ export default function App() {
 
       <footer className="app-footer">
         <div className="footer-content">
-          <p>&copy; {new Date().getFullYear()} Curalink Intelligence Platform. All rights reserved.</p>
+          <div className="footer-main">
+            <p className="copyright">&copy; {new Date().getFullYear()} Curalink Intelligence Platform. All rights reserved.</p>
+            <p className="api-notice" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <AlertTriangle size={14} className="inline-icon" />
+              <span><strong>Notice:</strong> Running on free tier infrastructure. Initial API responses may experience slight delays.</span>
+            </p>
+          </div>
           <div className="footer-links">
             <a href="#">Privacy Policy</a>
             <a href="#">Terms of Service</a>
